@@ -4,7 +4,7 @@ namespace dotless.Core.Input
 
     public class FileReader : IFileReader
     {
-        public IPathResolver PathResolver { get; set; }
+        public static IPathResolver PathResolver { get; set; }
 
         public FileReader() : this(new RelativePathResolver())
         {
