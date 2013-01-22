@@ -6,7 +6,7 @@
     using Utils;
     using System;
 
-    public class Number : Node, IOperable
+    public class Number : Node, IOperable, IComparable
     {
         public double Value { get; set; }
         public string Unit { get; set; }
@@ -44,13 +44,9 @@
             //TODO: It would be nice to look up which units have sensible precision.
             //      e.g. do sub pixels or sub points make sense?
             //      e.g. does it make sense for anything other than em to have more precision? Radians?
-            switch (Unit)
-            {
-                case "em":
-                    return 4;
-                default:
-                    return 2;
-            }
+            //
+            // For now, follow less.js and allow any number of decimals
+            return 9;
         }
 
         public override void AppendCSS(Env env)
@@ -69,7 +65,7 @@
         // `101cm`.
         public Node Operate(Operation op, Node other)
         {
-            Guard.ExpectNode<Number>(other, "right hand side of " + op.Operator, op.Index);
+            Guard.ExpectNode<Number>(other, "right hand side of " + op.Operator, op.Location);
 
             var dim = (Number) other;
 
@@ -109,6 +105,29 @@
         public static Number operator -(Number n)
         {
             return new Number(-n.Value, n.Unit);
+        }
+
+        public int CompareTo(object obj)
+        {
+            Number n = obj as Number;
+
+            if (n)
+            {
+                if (n.Value > Value)
+                {
+                    return -1;
+                }
+                else if (n.Value < Value)
+                {
+                    return 1;
+                }
+                else
+                {
+                    return 0;
+                }
+            }
+
+            return -1;
         }
     }
 }

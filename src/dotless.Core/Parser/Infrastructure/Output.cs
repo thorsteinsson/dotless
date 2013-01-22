@@ -102,6 +102,11 @@
             return AppendMany(nodes, n => Env.Output.Append(n), join);
         }
 
+        public Output AppendMany(IEnumerable<string> list, string join)
+        {
+            return AppendMany(list, (item, sb) => sb.Append(item), join);
+        }
+
         public Output AppendMany<T>(IEnumerable<T> list, Func<T, string> toString, string join)
         {
             return AppendMany(list, (item, sb) => sb.Append(toString(item)), join);
@@ -174,6 +179,11 @@
             int trimLLength = 0;
             int length = Builder.Length;
 
+            if (length == 0)
+            {
+                return this;
+            }
+
             while (trimLLength < length && 
                     c.HasValue ? Builder[trimLLength] == c.Value : 
                                 char.IsWhiteSpace(Builder[trimLLength]))
@@ -196,6 +206,11 @@
         {
             int trimRLength = 0;
             int length = Builder.Length;
+
+            if (length == 0)
+            {
+                return this;
+            }
 
             while (trimRLength < length && 
                    c.HasValue ? Builder[length - (trimRLength + 1)] == c.Value :

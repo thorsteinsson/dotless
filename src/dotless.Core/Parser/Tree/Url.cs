@@ -7,21 +7,19 @@
     using Infrastructure.Nodes;
     using Utils;
     using Exceptions;
+    using Plugins;
+    using dotless.Core.Importers;
 
     public class Url : Node
     {
         public Node Value { get; set; }
+        public List<string> ImportPaths { get; set; }
+        public IImporter Importer { get; set; }
 
-        public Url(Node value, IEnumerable<string> paths)
+        public Url(Node value, IImporter importer)
         {
-            if (value is TextNode)
-            {
-                var textValue = value as TextNode;
-                if (!Regex.IsMatch(textValue.Value, @"^(http:\/)?\/") && paths.Any())
-                {
-                    textValue.Value = paths.Concat(new[] { textValue.Value }).AggregatePaths();
-                }
-            }
+            Importer = importer;
+            ImportPaths = importer.GetCurrentPathsClone();
 
             Value = value;
         }
@@ -31,17 +29,42 @@
             Value = value;
         }
 
-        public string GetUrl()
+        /// <summary>
+        ///  Gets the url value, unadjusted, as in the less
+        ///  If the url does not contain a text node this will return null
+        /// </summary>
+        /// <returns></returns>
+        public string GetUnadjustedUrl()
         {
-            if (Value is TextNode)
-                return (Value as TextNode).Value;
+            var textValue = Value as TextNode;
+            if (textValue != null)
+            {
+                return textValue.Value;
+            }
 
-            throw new ParserException("Imports do not allow expressions");
+            return null;
+        }
+
+        private Node AdjustUrlPath(Node value)
+        {
+            var textValue = value as TextNode;
+            if (textValue != null)
+                return AdjustUrlPath(textValue);
+            return value;
+        }
+
+        private TextNode AdjustUrlPath(TextNode textValue)
+        {
+            if (Importer != null)
+            {
+                textValue.Value = Importer.AlterUrl(textValue.Value, ImportPaths);
+            }
+            return textValue;
         }
 
         public override Node Evaluate(Env env)
         {
-            return new Url(Value.Evaluate(env));
+            return new Url(AdjustUrlPath(Value.Evaluate(env)));
         }
 
         public override void AppendCSS(Env env)
@@ -50,6 +73,11 @@
                 .Append("url(")
                 .Append(Value)
                 .Append(")");
+        }
+
+        public override void Accept(IVisitor visitor)
+        {
+            Value = VisitAndReplace(Value, visitor);
         }
     }
 }

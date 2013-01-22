@@ -19,10 +19,12 @@ namespace dotless.Test.Specs
         [Test]
         public void OperationsAndPrecisions()
         {
-            AssertExpression("3.33px", "10px / 3"); // TODO - check px allowed precision
-            AssertExpression("3.33px", "10 / 3px"); // TODO - check px allowed precision
+            AssertExpression("3.333333333px", "10px / 3"); // TODO - check px allowed precision
+            AssertExpression("3.333333333px", "10 / 3px"); // TODO - check px allowed precision
             AssertExpression("1.875em", "15 / 8em");
             AssertExpression("1.875em", "15em / 8");
+            AssertExpression("0.333333333%", "1 / 3%");
+            AssertExpression("0.333333333%", "1% / 3");
         }
 
         [Test]
@@ -72,7 +74,7 @@ namespace dotless.Test.Specs
         [Test]
         public void Colours()
         {
-            AssertExpression("#123", "#123");
+            AssertExpression("#123456", "#123456");
             AssertExpression("#334455", "#234 + #111111");
             AssertExpression("black", "#222222 - #fff");
             AssertExpression("#222222", "2 * #111");

@@ -3,6 +3,7 @@ namespace dotless.Test.Unit.Response
     using Core.Response;
     using Moq;
     using NUnit.Framework;
+    using System.Web;
 
     public class CachedCssResponseFixture : HttpFixtureBase
     {
@@ -11,23 +12,25 @@ namespace dotless.Test.Unit.Response
         [SetUp]
         public void Setup()
         {
-            CachedCssResponse = new CachedCssResponse(Http.Object);
+            CachedCssResponse = new CachedCssResponse(Http.Object, false);
         }
 
         [Test]
         public void ContentTypeIsSetToTextCss()
         {
-            CachedCssResponse.WriteCss(null);
+            CachedCssResponse.WriteHeaders();
 
             HttpResponse.VerifySet(r => r.ContentType = "text/css", Times.Once());
         }
 
         [Test]
-        public void ResponseEndIsCalled()
+        public void SetsCachabilityPublic()
         {
-            CachedCssResponse.WriteCss(null);
+            CachedCssResponse.WriteHeaders();
+            CachedCssResponse.WriteCss("test1");
+            CachedCssResponse.WriteCss("test2");
 
-            HttpResponse.Verify(r => r.End(), Times.Once());
+            HttpCache.Verify(c => c.SetCacheability(HttpCacheability.Public), Times.Once());
         }
     }
 }

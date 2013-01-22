@@ -35,68 +35,37 @@ namespace dotless.Test.Specs
         }
 
         [Test]
-        public void MediaDirective()
+        public void FontFaceDirectiveInClass()
         {
             var input = @"
-@media all and (min-width: 640px) {
-  #header {
-    background-color: #0f0;
+#font {
+  .test(){
+    @font-face {
+      font-family: 'MyFont';
+      src: url('/css/fonts/myfont.eot');
+      src: url('/css/fonts/myfont.eot?#iefix') format('embedded-opentype'),
+           url('/css/fonts/myfont.woff') format('woff'),
+           url('/css/fonts/myfont.ttf') format('truetype'),
+           url('/css/fonts/myfont.svg#reg') format('svg');
+    }
+    .cl {
+      background: red;
+    }
   }
 }
-";
 
-            AssertLessUnchanged(input);
-        }
-
-        [Test]
-        public void MediaDirectiveCanUseVariables()
-        {
-            var input =
-                @"
-@var: red;
-@media screen {
-  color: @var;
-  #header {
-    background-color: @var;
-  }
-}
-";
+#font > .test();";
 
             var expected = @"
-@media screen {
-  color: red;
-  #header {
-    background-color: red;
-  }
+@font-face {
+  font-family: 'MyFont';
+  src: url('/css/fonts/myfont.eot');
+  src: url('/css/fonts/myfont.eot?#iefix') format('embedded-opentype'), url('/css/fonts/myfont.woff') format('woff'), url('/css/fonts/myfont.ttf') format('truetype'), url('/css/fonts/myfont.svg#reg') format('svg');
+}
+.cl {
+  background: red;
 }
 ";
-
-            AssertLess(input, expected);
-        }
-
-        [Test]
-        public void MediaDirectiveCanDeclareVariables()
-        {
-            var input =
-                @"
-@media screen {
-  @var: red;
-  color: @var;
-  #header {
-    background-color: @var;
-  }
-}
-";
-
-            var expected = @"
-@media screen {
-  color: red;
-  #header {
-    background-color: red;
-  }
-}
-";
-
             AssertLess(input, expected);
         }
 
@@ -154,132 +123,6 @@ namespace dotless.Test.Specs
         }
 
         [Test]
-        public void MediaDirectiveCanHavePageDirective1()
-        {
-            // see https://github.com/dotless/dotless/issues/27
-            var input =
-                @"
-@media print {
-  @page {
-    margin: 0.5cm;
-  }
-}
-";
-
-            AssertLessUnchanged(input);
-        }
-
-        [Test]
-        public void MediaDirectiveCanHavePageDirective2()
-        {
-            var input =
-                @"
-@media print {
-  @page :left {
-    margin: 0.5cm;
-  }
-  
-  @page :right {
-    margin: 0.5cm;
-  }
-  
-  @page Test:first {
-    margin: 1cm;
-  }
-  
-  @page :first {
-    size: 8.5in 11in;
-    @top-left {
-      margin: 1cm;
-    }
-    
-    @top-left-corner {
-      margin: 1cm;
-    }
-    
-    @top-center {
-      margin: 1cm;
-    }
-    
-    @top-right {
-      margin: 1cm;
-    }
-    
-    @top-right-corner {
-      margin: 1cm;
-    }
-    
-    @bottom-left {
-      margin: 1cm;
-    }
-    
-    @bottom-left-corner {
-      margin: 1cm;
-    }
-    
-    @bottom-center {
-      margin: 1cm;
-    }
-    
-    @bottom-right {
-      margin: 1cm;
-    }
-    
-    @bottom-right-corner {
-      margin: 1cm;
-    }
-    
-    @left-top {
-      margin: 1cm;
-    }
-    
-    @left-middle {
-      margin: 1cm;
-    }
-    
-    @left-bottom {
-      margin: 1cm;
-    }
-    
-    @right-top {
-      margin: 1cm;
-    }
-    
-    @right-middle {
-      content: ""Page "" counter(page);
-    }
-    
-    @right-bottom {
-      margin: 1cm;
-    }
-  }
-}
-";
-
-            AssertLessUnchanged(input);
-        }
-
-        [Test]
-        public void MediaDirectiveCanHavePageDirective3()
-        {
-            var input =
-                @"
-@media print {
-  @page:first {
-    margin: 0.5cm;
-  }
-}";
-            var expected =
-                @"
-@media print {
-  @page :first {
-    margin: 0.5cm;
-  }
-}";
-            AssertLess(input, expected);
-        }
-
-        [Test]
         public void NamespaceDirective()
         {
             // see https://github.com/dotless/dotless/issues/27
@@ -299,7 +142,7 @@ namespace dotless.Test.Specs
   0% {
     font-size: 10px;
   }
-  30% {
+  30.5% {
     font-size: 15px;
   }
   100% {
@@ -366,16 +209,53 @@ namespace dotless.Test.Specs
   to {
     font-size: 15px;
   }
-  from,to {
+  from, to {
     font-size: 12px;
   }
-  0%,100% {
+  0%, 100% {
     font-size: 12px;
   }
 }
 #box {
   animation: fontbulger1 2s infinite;
 }";
+            AssertLessUnchanged(input);
+        }
+
+        [Test]
+        public void KeyFrameDirective3()
+        {
+            var input = @"
+@-webkit-keyframes rotate-this {
+  0% {
+    -webkit-transform: scale(0.6) rotate(0deg);
+  }
+  50.01% {
+    -webkit-transform: scale(0.6) rotate(180deg);
+  }
+  100% {
+    -webkit-transform: scale(0.6) rotate(315deg);
+  }
+}
+#box {
+  animation: rotate-this 2s infinite;
+}";
+            AssertLessUnchanged(input);
+        }
+
+        [Test]
+        public void KeyFrameDirective4()
+        {
+            var input = @"
+@keyframes rotate-this {
+  0%, 1%, 10%, 80%, to {
+    -webkit-transform: scale(0.6) rotate(0deg);
+  }
+  50% {
+    -webkit-transform: scale(0.6) rotate(180deg);
+  }
+}
+";
             AssertLessUnchanged(input);
         }
 
@@ -478,7 +358,9 @@ ol.comma > li:nth-last-child(2)::after {
         public void NthChildExpressions()
         {
             var input = @"
-li:nth-child(4n+1), li:nth-child(-5n), li:nth-child(-n+2) {
+li:nth-child(4n+1),
+li:nth-child(-5n),
+li:nth-child(-n+2) {
   color: white;
 }
 ";
@@ -540,7 +422,7 @@ a ~ p {
         {
             // see http://dev.w3.org/csswg/css3-values/
 
-            List<string> units = new List<string>() { "em", "ex", "ch", "rem", "vw", "vh", "vm", "cm", "mm", "%", "in", "pt", "px", "pc", "deg", "grad", "rad", "s", "ms", "fr", "gr", "Hz", "kHz" };
+            List<string> units = new List<string>() { "em", "ex", "ch", "rem", "vw", "vh", "vmin", "vm", "cm", "mm", "%", "in", "pt", "px", "pc", "deg", "grad", "rad", "s", "ms", "fr", "gr", "Hz", "kHz", "dpcm", "dppx" };
 
             foreach (string unit in units)
             {
@@ -548,5 +430,59 @@ a ~ p {
             }
         }
 
+        [Test]
+        public void FontFaceMixin()
+        {
+            var input = @"
+.def-font(@name) {
+    @font-face {
+        font-family: @name
+    }
+}
+
+.def-font(font-a);
+.def-font(font-b);";
+
+            var expected = @"
+@font-face {
+  font-family: font-a;
+}
+@font-face {
+  font-family: font-b;
+}
+";
+            AssertLess(input, expected);
+        }
+
+#if CSS3EXPERIMENTAL
+        [Test]
+        public void GridRepeatingPatternSupported()
+        {
+            //see http://www.w3.org/TR/css3-grid/#example0
+
+            AssertExpressionUnchanged("0 1em (0.5in 5rem 0)[2]");
+            AssertExpressionUnchanged("(500px)[2]");
+        }
+
+        [Test]
+        public void GridRepeatingPatternSupportedWithVars()
+        {
+            var input = @"
+@a : 1em;
+@b : 2px;
+@c : red;
+@d : 10;
+.test {
+  background: 0 @a (@b 0 @c)[@d];
+}
+";
+            var expected = @"
+.test {
+  background: 0 1em (2px 0 red)[10];
+}
+";
+            AssertLess(input, expected);
+        }
+#endif
     }
 }

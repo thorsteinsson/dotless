@@ -7,14 +7,17 @@ namespace dotless.Core.Parser.Tree
     using Infrastructure;
     using Infrastructure.Nodes;
     using Utils;
+    using Plugins;
 
     public class MixinCall : Node
     {
         public List<NamedArgument> Arguments { get; set; }
-        protected Selector Selector { get; set; }
+        public Selector Selector { get; set; }
+        public bool Important { get; set; }
 
-        public MixinCall(NodeList<Element> elements, List<NamedArgument> arguments)
+        public MixinCall(NodeList<Element> elements, List<NamedArgument> arguments, bool important)
         {
+            Important = important;
             Selector = new Selector(elements);
             Arguments = arguments;
         }
@@ -25,22 +28,28 @@ namespace dotless.Core.Parser.Tree
             var closures = env.FindRulesets(Selector);
 
             if(closures == null)
-                throw new ParsingException(Selector.ToCSS(env).Trim() + " is undefined", Index);
+                throw new ParsingException(Selector.ToCSS(env).Trim() + " is undefined", Location);
 
             env.Rule = this;
 
             var rules = new NodeList();
 
             if (PreComments)
-                rules.Add(PreComments);
+                rules.AddRange(PreComments);
+
             foreach (var closure in closures)
             {
                 var ruleset = closure.Ruleset;
 
-                if (!ruleset.MatchArguments(Arguments, env))
+                var matchType = ruleset.MatchArguments(Arguments, env);
+
+                if (matchType == MixinMatch.ArgumentMismatch)
                     continue;
 
                 found = true;
+
+                if (matchType == MixinMatch.GuardFail)
+                    continue;
 
                 if (ruleset is MixinDefinition)
                 {
@@ -51,7 +60,7 @@ namespace dotless.Core.Parser.Tree
                     }
                     catch (ParsingException e)
                     {
-                        throw new ParsingException(e.Message, e.Index, Index);
+                        throw new ParsingException(e.Message, e.Location, Location);
                     }
                 }
                 else
@@ -66,7 +75,7 @@ namespace dotless.Core.Parser.Tree
                 }
             }
             if (PostComments)
-                rules.Add(PostComments);
+                rules.AddRange(PostComments);
 
             env.Rule = null;
 
@@ -74,11 +83,47 @@ namespace dotless.Core.Parser.Tree
             {
                 var message = String.Format("No matching definition was found for `{0}({1})`",
                                             Selector.ToCSS(env).Trim(),
-                                            StringExtensions.JoinStrings(Arguments.Select(a => a.Value.ToCSS(env)), ", "));
-                throw new ParsingException(message, Index);
+                                            Arguments.Select(a => a.Value.ToCSS(env)).JoinStrings(env.Compress ? "," : ", "));
+                throw new ParsingException(message, Location);
+            }
+
+            if (Important)
+            {
+                var importantRules = new NodeList();
+
+                foreach (Node node in rules)
+                {
+                    Rule r = node as Rule;
+                    if (r != null)
+                    {
+                        var valueNode = r.Value;
+                        var value = valueNode as Value;
+                        value = value != null
+                                    ? new Value(value.Values, "!important").ReducedFrom<Value>(value)
+                                    : new Value(new NodeList {valueNode}, "!important");
+
+                        importantRules.Add((new Rule(r.Name, value)).ReducedFrom<Rule>(r));
+                    }
+                    else
+                    {
+                        importantRules.Add(node);
+                    }
+                }
+
+                return importantRules;
             }
 
             return rules;
+        }
+
+        public override void Accept(IVisitor visitor)
+        {
+            Selector = VisitAndReplace(Selector, visitor);
+
+            foreach (var a in Arguments)
+            {
+                a.Value = VisitAndReplace(a.Value, visitor);
+            }
         }
     }
 }

@@ -9,11 +9,11 @@
 
     public class KeyFrame : Ruleset
     {
-        public string Identifier { get; set; }
+        public NodeList Identifiers { get; set; }
 
-        public KeyFrame(string identifier, NodeList rules)
+        public KeyFrame(NodeList identifiers, NodeList rules)
         {
-            Identifier = identifier;
+            Identifiers = identifiers;
             Rules = rules;
         }
 
@@ -27,9 +27,14 @@
             return this;
         }
 
-        protected override void AppendCSS(Env env, Context context)
+        public override void Accept(Plugins.IVisitor visitor)
         {
-            env.Output.Append(Identifier);
+            Rules = VisitAndReplace(Rules, visitor);
+        }
+
+        public override void AppendCSS(Env env, Context context)
+        {
+            env.Output.AppendMany(Identifiers, env.Compress ? "," : ", ");
 
             // Append pre comments as we out put each rule ourselves
             if (Rules.PreComments)

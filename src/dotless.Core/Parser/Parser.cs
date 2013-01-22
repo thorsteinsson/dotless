@@ -7,6 +7,8 @@ namespace dotless.Core.Parser
     using Infrastructure;
     using Stylizers;
     using Tree;
+    using dotless.Core.Plugins;
+    using System.Collections.Generic;
 
     //
     // less.js - parser
@@ -47,86 +49,107 @@ namespace dotless.Core.Parser
     {
         public Tokenizer Tokenizer { get; set; }
         public IStylizer Stylizer { get; set; }
+        public string FileName { get; set; }
+        public bool Debug { get; set; }
 
         private INodeProvider _nodeProvider;
         public INodeProvider NodeProvider
         {
-            get { return _nodeProvider??(new DefaultNodeProvider()); }
+            get { return _nodeProvider ?? (_nodeProvider = new DefaultNodeProvider()); }
             set { _nodeProvider = value; }
         }
 
-        private Importer _importer;
-        public Importer Importer
+        private IImporter _importer;
+        public IImporter Importer
         {
             get { return _importer; }
             set
             {
                 _importer = value;
-                _importer.Parser = () => new Parser(Tokenizer.Optimization, Stylizer, _importer) {NodeProvider = this.NodeProvider};
+                _importer.Parser = () => new Parser(Tokenizer.Optimization, Stylizer, _importer)
+                                             {
+                                                 NodeProvider = NodeProvider,
+                                                 Debug = Debug
+                                             };
             }
         }
 
         private const int defaultOptimization = 1;
+        private const bool defaultDebug = false;
 
         public Parser()
-            : this(defaultOptimization)
+            : this(defaultOptimization, defaultDebug)
+        {
+        }
+
+        public Parser(bool debug)
+            : this(defaultOptimization, debug)
         {
         }
 
         public Parser(int optimization)
-            : this(optimization, new PlainStylizer(), new Importer())
+            : this(optimization, new PlainStylizer(), new Importer(), defaultDebug)
         {
         }
 
-        public Parser(IStylizer stylizer, Importer importer)
-            : this(defaultOptimization, stylizer, importer)
+        public Parser(int optimization, bool debug)
+            : this(optimization, new PlainStylizer(), new Importer(), debug)
         {
         }
 
-        public Parser(int optimization, IStylizer stylizer, Importer importer)
+        public Parser(IStylizer stylizer, IImporter importer)
+            : this(defaultOptimization, stylizer, importer, defaultDebug)
+        {
+        }
+
+        public Parser(IStylizer stylizer, IImporter importer, bool debug)
+            : this(defaultOptimization, stylizer, importer, debug)
+        {
+        }
+
+        public Parser(int optimization, IStylizer stylizer, IImporter importer)
+            : this(optimization, stylizer, importer, defaultDebug)
+        {
+        }
+
+        public Parser(int optimization, IStylizer stylizer, IImporter importer, bool debug)
         {
             Stylizer = stylizer;
             Importer = importer;
+            Debug = debug;
             Tokenizer = new Tokenizer(optimization);
         }
 
-        public Ruleset Parse(string input,  string fileName)
+        public Ruleset Parse(string input, string fileName)
         {
-            ParsingException parsingException = null;
             Ruleset root = null;
+            FileName = fileName;
 
             try
             {
-                Tokenizer.SetupInput(input);
+                Tokenizer.SetupInput(input, fileName);
 
                 var parsers = new Parsers(NodeProvider);
-                root = new Root(parsers.Primary(this), e => GenerateParserError(e, fileName));
+                root = new Root(parsers.Primary(this), e => GenerateParserError(e));
             }
             catch (ParsingException e)
             {
-                parsingException = e;
+                throw GenerateParserError(e);
             }
 
-            if (Tokenizer.HasCompletedParsing() && parsingException == null)
-                return root;
+            if (!Tokenizer.HasCompletedParsing())
+                throw GenerateParserError(new ParsingException("Content after finishing parsing (missing opening bracket?)", Tokenizer.GetNodeLocation(Tokenizer.Location.Index)));
 
-            throw GenerateParserError(parsingException, fileName);
+            return root;
         }
 
-        private ParserException GenerateParserError(ParsingException parsingException, string fileName)
+        private ParserException GenerateParserError(ParsingException parsingException)
         {
-            var errorLocation = Tokenizer.Location.Index;
-            var error = "Parse Error";
-            var call = 0;
+            var errorLocation = parsingException.Location;
+            var error = parsingException.Message;
+            var call = parsingException.CallLocation;
 
-            if(parsingException != null)
-            {
-                errorLocation = parsingException.Index;
-                error = parsingException.Message;
-                call = parsingException.Call;
-            }
-
-            var zone = Tokenizer.GetZone(error, errorLocation, call, fileName);
+            var zone = new Zone(errorLocation, error, call != null ? new Zone(call) : null);
 
             var message = Stylizer.Stylize(zone);
 

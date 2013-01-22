@@ -28,22 +28,37 @@
         {
         }
 
+        public override void Accept(Plugins.IVisitor visitor)
+        {
+            Rules = VisitAndReplace(Rules, visitor);
+            Value = VisitAndReplace(Value, visitor);
+        }
+
         public override Node Evaluate(Env env)
         {
             env.Frames.Push(this);
 
+            Directive evaldDirective;
+
             if (Rules != null)
-                Rules = new NodeList(Rules.Select(r => r.Evaluate(env))).ReducedFrom<NodeList>(Rules);
+            {
+                evaldDirective = new Directive(Name, Identifier, new NodeList(Rules.Select(r => r.Evaluate(env))).ReducedFrom<NodeList>(Rules));
+            }
             else
-                Value = Value.Evaluate(env);
+            {
+                evaldDirective = new Directive(Name, Value.Evaluate(env));
+            }
 
             env.Frames.Pop();
 
-            return this;
+            return evaldDirective;
         }
 
-        protected override void AppendCSS(Env env, Context context)
+        public override void AppendCSS(Env env, Context context)
         {
+            if (env.Compress && Rules != null && !Rules.Any())
+                return;
+
             env.Output.Append(Name);
 
             if (!string.IsNullOrEmpty(Identifier))

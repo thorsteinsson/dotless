@@ -2,15 +2,19 @@ namespace dotless.Core.Parser.Tree
 {
     using System.Collections.Generic;
     using System.Linq;
+    using System.Text;
     using Infrastructure;
     using Infrastructure.Nodes;
     using Utils;
-    using System.Text;
+    using Plugins;
 
     public class Ruleset : Node
     {
         public NodeList<Selector> Selectors { get; set; }
         public NodeList Rules { get; set; }
+        public bool Evaluated { get; protected set; }
+        public bool IsRoot { get; set; }
+        public bool MultiMedia { get; set; }
 
         /// <summary>
         ///  The original Ruleset this was cloned from during evaluation
@@ -90,7 +94,22 @@ namespace dotless.Core.Parser.Tree
             if (_lookups.ContainsKey(key))
                 return _lookups[key];
 
-            foreach (var rule in Rulesets().Where(rule => rule != self))
+            var validRulesets = Rulesets().Where(rule =>
+                {
+                    if (rule != self)
+                        return true;
+
+                    MixinDefinition mixinRule = rule as MixinDefinition;
+
+                    if (mixinRule != null)
+                    {
+                        return mixinRule.Condition != null;
+                    }
+
+                    return false;
+                });
+
+            foreach (var rule in validRulesets)
             {
                 if (rule.Selectors && rule.Selectors.Any(selector.Match))
                 {
@@ -113,18 +132,29 @@ namespace dotless.Core.Parser.Tree
             return _lookups[key] = rules;
         }
 
-        public virtual bool MatchArguments(List<NamedArgument> arguements, Env env)
+        public virtual MixinMatch MatchArguments(List<NamedArgument> arguments, Env env)
         {
-            return arguements == null || arguements.Count == 0;
+            return (arguments == null || arguments.Count == 0) ? MixinMatch.Pass : MixinMatch.ArgumentMismatch;
         }
 
         public override Node Evaluate(Env env)
         {
+            if(Evaluated) return this;
+
             // create a clone so it is non destructive
-            Ruleset clone = new Ruleset(Selectors, new NodeList(Rules), this.OriginalRuleset)
-                .ReducedFrom<Ruleset>(this);
+            var clone = new Ruleset(new NodeList<Selector>(Selectors), new NodeList(Rules), OriginalRuleset).ReducedFrom<Ruleset>(this);
+
             clone.EvaluateRules(env);
+            clone.Evaluated = true;
+
             return clone;
+        }
+
+        public override void Accept(IVisitor visitor)
+        {
+            Selectors = VisitAndReplace(Selectors, visitor);
+
+            Rules = VisitAndReplace(Rules, visitor);
         }
 
         /// <summary>
@@ -135,23 +165,28 @@ namespace dotless.Core.Parser.Tree
         {
             env.Frames.Push(this);
 
-            NodeHelper.ExpandNodes<MixinCall>(env, this.Rules);
+            for (var i = 0; i < Selectors.Count; i++)
+            {
+                Selectors[i] = Selectors[i].Evaluate(env) as Selector;
+            }
+
+            int mediaBlocks = env.MediaBlocks.Count;
+
+            NodeHelper.ExpandNodes<MixinCall>(env, Rules);
 
             for (var i = 0; i < Rules.Count; i++)
             {
                 Rules[i] = Rules[i].Evaluate(env);
             }
 
+            // if media blocks are inside this ruleset we have to "catch" the bubbling and
+            // make sure they get this rulesets selectors
+            for (var j = mediaBlocks; j < env.MediaBlocks.Count; j++)
+            {
+                env.MediaBlocks[j].BubbleSelectors(Selectors);
+            }
+
             env.Frames.Pop();
-        }
-
-        public string AppendCSS()
-        {
-            var env = new Env();
-
-            AppendCSS(env);
-
-            return env.Output.ToString();
         }
 
         public override void AppendCSS(Env env)
@@ -159,8 +194,7 @@ namespace dotless.Core.Parser.Tree
             if (!Rules.Any())
                 return;
 
-            ((Ruleset)Evaluate(env))
-                .AppendCSS(env, new Context());
+            ((Ruleset) Evaluate(env)).AppendCSS(env, new Context());
         }
 
         /// <summary>
@@ -190,16 +224,18 @@ namespace dotless.Core.Parser.Tree
             env.Output.Append(env.Compress ? "}" : "\n}");
         }
 
-        protected virtual void AppendCSS(Env env, Context context)
+        public virtual void AppendCSS(Env env, Context context)
         {
-            var css = new List<string>(); // The CSS output
             var rules = new List<StringBuilder>(); // node.Ruleset instances
             int nonCommentRules = 0;
             var paths = new Context(); // Current selectors
-            bool isRoot = this is Root;
 
-            if (!isRoot)
+            if (!IsRoot)
             {
+                if (!env.Compress && env.Debug && Location != null)
+                {
+                    env.Output.Append(string.Format("/* {0}:L{1} */\n", Location.FileName, Zone.GetLineNumber(Location)));
+                }
                 paths.AppendSelectors(context, Selectors);
             }
 
@@ -211,7 +247,7 @@ namespace dotless.Core.Parser.Tree
                     continue;
 
                 var comment = node as Comment;
-                if (comment != null && comment.Silent)
+                if (comment != null && !comment.IsValidCss)
                     continue;
 
                 var ruleset = node as Ruleset;
@@ -222,18 +258,29 @@ namespace dotless.Core.Parser.Tree
                 else
                 {
                     var rule = node as Rule;
-                    if ((rule != null && !rule.Variable) || (rule == null && !isRoot))
+
+                    if (rule && rule.Variable)
+                        continue;
+
+                    if (!IsRoot)
                     {
-                        if (comment == null)
+                        if (!comment)
                             nonCommentRules++;
 
                         env.Output.Push()
                             .Append(node);
                         rules.Add(env.Output.Pop());
                     }
-                    else if (rule == null)
+                    else
                     {
-                        env.Output.Append(node);
+                        env.Output
+                            .Append(node);
+
+                        if (!env.Compress)
+                        {
+                            env.Output
+                                .Append("\n");
+                        }
                     }
                 }
             }
@@ -243,7 +290,7 @@ namespace dotless.Core.Parser.Tree
             // If this is the root node, we don't render
             // a selector, or {}.
             // Otherwise, only output if this ruleset has rules.
-            if (isRoot)
+            if (IsRoot)
             {
                 env.Output.AppendMany(rules, env.Compress ? "" : "\n");
             }
@@ -255,7 +302,7 @@ namespace dotless.Core.Parser.Tree
 
                     env.Output.Append(env.Compress ? "{" : " {\n  ");
 
-                    env.Output.AppendMany(rules, env.Compress ? "" : "\n  ");
+                    env.Output.AppendMany(rules.ConvertAll(stringBuilder => stringBuilder.ToString()).Distinct(), env.Compress ? "" : "\n  ");
 
                     if (env.Compress)
                     {
@@ -263,7 +310,6 @@ namespace dotless.Core.Parser.Tree
                     }
 
                     env.Output.Append(env.Compress ? "}" : "\n}\n");
-
                 }
             }
 

@@ -36,6 +36,13 @@ namespace dotless.Test.Specs
         }
 
         [Test]
+        public void EscapingQuotesUnescaped()
+        {
+            AssertExpression(@"""", @"~""\""""");
+            AssertExpression(@"'", @"~""\'""");
+        }
+
+        [Test]
         public void EscapedWithTilde()
         {
             AssertExpression(@"DX.Transform.MS.BS.filter(opacity=50)", @"~""DX.Transform.MS.BS.filter(opacity=50)""");
@@ -136,14 +143,12 @@ namespace dotless.Test.Specs
 .mix-mul-class {
     .mix-mul(blue);
     .mix-mul(red);
-    .mix-mul(blue);
     .mix-mul(orange);
 }";
             var expected = @"
 .mix-mul-class {
   color: blue;
   color: red;
-  color: blue;
   color: orange;
 }";
             AssertLess(input, expected);
@@ -309,6 +314,35 @@ namespace dotless.Test.Specs
                 1,
                 25,
                 input);
+        }
+
+        [Test]
+        public void EscapeCopesWithIE8Hack1()
+        {
+            var input = @"~""\9""";
+            var expected = @"\9";
+
+            AssertExpression(expected, input);
+        }
+
+        [Test]
+        public void EscapeCopesWithIE8Hack2()
+        {
+            var input = @"""\9""";
+            var expected = @"""\9""";
+
+            AssertExpression(expected, input);
+        }
+
+        [Test]
+        public void EscapeSlash()
+        {
+            // from less.js
+
+            var input = @"""\"" \\""";
+            var expected = @"""\"" \\""";
+
+            AssertExpression(expected, input);
         }
 
         [Test]

@@ -2,8 +2,9 @@
 {
     using Infrastructure;
     using Infrastructure.Nodes;
+    using System;
 
-    public class Keyword : Node
+    public class Keyword : Node, IComparable
     {
         public string Value { get; set; }
 
@@ -20,6 +21,20 @@
         public override void AppendCSS(Env env)
         {
             env.Output.Append(Value);
+        }
+
+        public override string ToString()
+        {
+            return Value;
+        }
+
+        public int CompareTo(object obj)
+        {
+            if (obj == null)
+            {
+                return -1;
+            }
+            return obj.ToString().CompareTo(ToString());
         }
     }
 }

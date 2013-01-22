@@ -889,60 +889,6 @@ namespace dotless.Test.Specs
         }
 
         [Test]
-        public void IncludesAllMatchedMixins1()
-        {
-            var input =
-                @"
-.mixin ()                          { zero: 0; }
-.mixin (@a: 1px)                   { one: 1; }
-.mixin (@a)                        { one-req: 1; }
-.mixin (@a: 1px, @b: 2px)          { two: 2; }
-.mixin (@a, @b, @c)                { three-req: 3; }
-.mixin (@a: 1px, @b: 2px, @c: 3px) { three: 3; }
-
-.zero { .mixin(); }
-
-.one { .mixin(1); }
-
-.two { .mixin(1, 2); }
-
-.three { .mixin(1, 2, 3); }
-";
-
-            var expected =
-                @"
-.zero {
-  zero: 0;
-  one: 1;
-  two: 2;
-  three: 3;
-}
-.one {
-  zero: 0;
-  one: 1;
-  one-req: 1;
-  two: 2;
-  three: 3;
-}
-.two {
-  zero: 0;
-  one: 1;
-  two: 2;
-  three: 3;
-}
-.three {
-  zero: 0;
-  one: 1;
-  two: 2;
-  three-req: 3;
-  three: 3;
-}
-";
-
-            AssertLess(input, expected);
-        }
-
-        [Test]
         public void IncludesAllMatchedMixins2()
         {
             var input =
@@ -1199,10 +1145,12 @@ important-rule {
 .mixin {
   color: red;
 }
-.mixin:after, .dummy {
+.mixin:after,
+.dummy {
   color: green;
 }
-.mixin .inner, .dummy {
+.mixin .inner,
+.dummy {
   color: blue;
 }
 ";
@@ -1380,11 +1328,15 @@ important-rule {
 
             var expected =
                 @"
-.button.lefticon.icon-tick.fancy:hover, button.lefticon.icon-tick.fancy:hover, input[type=""submit""].lefticon.icon-tick.fancy:hover {
+.button.lefticon.icon-tick.fancy:hover,
+button.lefticon.icon-tick.fancy:hover,
+input[type=""submit""].lefticon.icon-tick.fancy:hover {
   background-image: url(https://github.com/images/icons/fugue/tick.png), -webkit-gradient(linear, 0% 0%, 0% 100%, from(#ff4079), to(#d10e47));
   background-image: url(https://github.com/images/icons/fugue/tick.png), -moz-linear-gradient(0% 100% 90deg,#d10e47, #ff4079);
 }
-.button.lefticon.icon24-tick.extralarge.fancy:hover, button.lefticon.icon24-tick.extralarge.fancy:hover, input[type=""submit""].lefticon.icon24-tick.extralarge.fancy:hover {
+.button.lefticon.icon24-tick.extralarge.fancy:hover,
+button.lefticon.icon24-tick.extralarge.fancy:hover,
+input[type=""submit""].lefticon.icon24-tick.extralarge.fancy:hover {
   background-image: url(https://github.com/images/icons/fugue/icons-24/tick.png), -webkit-gradient(linear, 0% 0%, 0% 100%, from(#ff4079), to(#d10e47));
   background-image: url(https://github.com/images/icons/fugue/icons-24/tick.png), -moz-linear-gradient(0% 100% 90deg,#d10e47, #ff4079);
 }";
@@ -1426,5 +1378,171 @@ important-rule {
             AssertLess(input, expected);
         }
 
+        [Test]
+        public void MixinMatchingAllowsMultiples()
+        {
+            var input = @"
+.bo,
+.bar {
+  width: 100%;
+}
+.bo {
+  border: 1px;
+}
+.extended {
+  .bo;
+}
+.foo .bar {
+  .bar;
+}
+";
+            var expected = @"
+.bo,
+.bar {
+  width: 100%;
+}
+.bo {
+  border: 1px;
+}
+.extended {
+  width: 100%;
+  border: 1px;
+}
+.foo .bar {
+  width: 100%;
+}
+";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void MixinImportant()
+        {
+            var input = @"
+.mixin (9) {
+  border: 9 !important;  
+}
+.mixin (@a: 0) {
+  border: @a;
+  boxer: 1, @a;
+}
+
+.class {
+  .mixin(1);
+  .mixin(2) !important;
+  .mixin(3);
+  .mixin(4) !important;
+  .mixin(5);
+  .mixin !important;
+  .mixin(9);
+}";
+            var expected = @"
+.class {
+  border: 1;
+  boxer: 1, 1;
+  border: 2 !important;
+  boxer: 1, 2 !important;
+  border: 3;
+  boxer: 1, 3;
+  border: 4 !important;
+  boxer: 1, 4 !important;
+  border: 5;
+  boxer: 1, 5;
+  border: 0 !important;
+  boxer: 1, 0 !important;
+  border: 9 !important;
+  border: 9;
+  boxer: 1, 9;
+}";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void MixinCallingSameName()
+        {
+            // attempt to reproduce bug #136
+            var input = @"
+.clearfix() {
+  // For IE 6/7 (trigger hasLayout)
+  zoom:1; 
+  // For modern browsers
+  &:before {
+    content:"""";
+    display:table;
+  }
+  &:after {
+    content:"""";
+    display:table;
+  }
+  &:after {
+    clear:both;
+  }
+}
+.clearfix { 
+  .clearfix();
+}";
+            var expected = @"
+.clearfix {
+  zoom: 1;
+}
+.clearfix:before {
+  content: """";
+  display: table;
+}
+.clearfix:after {
+  content: """";
+  display: table;
+}
+.clearfix:after {
+  clear: both;
+}
+";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void DuplicatesRemovedFromMixinCall()
+        {
+            var input = @"
+.test() {
+  background: none;
+  color: red;
+  background: none;
+}
+
+.test2 {
+  .test();
+  .test;
+}";
+
+            var expected = @"
+.test2 {
+  background: none;
+  color: red;
+}";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void TestMixinCallIncorrectlyRecognisedLessJsBug901()
+        {
+            var input = @"
+.mixin_def(@url, @position){
+    background-image: @url;
+    background-position: @position;
+}
+.error{
+  @s: ""/"";
+  .mixin_def( ""@{s}a.png"", center center);
+}";
+            var expected = @"
+.error {
+  background-image: ""/a.png"";
+  background-position: center center;
+}
+";
+
+            AssertLess(input, expected);
+        }
     }
 }

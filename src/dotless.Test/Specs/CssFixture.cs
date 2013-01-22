@@ -81,7 +81,9 @@ div {
         public void ChildSelector()
         {
             var input = @"
-h1, h2 > a > p, h3 {
+h1,
+h2 > a > p,
+h3 {
   color: none;
 }
 ";
@@ -115,8 +117,9 @@ div#id {
         public void PseudoClass()
         {
             var input = @"
-a:hover, a:link {
-  color: #999;
+a:hover,
+a:link {
+  color: black;
 }
 ";
 
@@ -127,7 +130,8 @@ a:hover, a:link {
         public void FirstChildPseudoClass()
         {
             var input = @"
-p, p:first-child {
+p,
+p:first-child {
   text-transform: none;
 }
 ";
@@ -190,7 +194,7 @@ p {
             var input =
                 @"
 #shorthands {
-  border: 1px solid #000;
+  border: 1px solid black;
   font: 12px/16px Arial;
   margin: 1px 0;
   padding: 0 auto;
@@ -224,6 +228,22 @@ p {
 
             AssertLessUnchanged(input);
         }
+
+        [Test]
+        public void CapitalProperties()
+        {
+            var input =
+                @"
+.misc {
+  -Moz-Border-Radius: 2Px;
+  dISplay: NONE;
+  WIDTH: .1EM;
+}
+";
+
+            AssertLessUnchanged(input);
+        }
+
 
         [Test]
         public void Important()
@@ -283,7 +303,7 @@ h2[title] {
   color: transparent;
 }
 form[data-disabled] {
-  color: #444;
+  color: #123456;
 }
 ";
 
@@ -319,6 +339,16 @@ form[data-disabled] {
         }
 
         [Test]
+        public void CheckUrlWithDataContainingQuoted()
+        {
+
+            var input = @".help-icon {
+  background: url('data:image/svg+xml, <svg version=""1.1""><g></g></svg>');
+}";
+            AssertLessUnchanged(input);
+        }
+
+        [Test]
         public void CheckUrlWithDataNotQuoted()
         {
 
@@ -329,14 +359,12 @@ form[data-disabled] {
         }
 
         [Test]
-        [Ignore("Bug in dotless")]
         public void HttpUrl()
         {
             AssertExpressionUnchanged(@"url(http://), ""}"", url(""http://}"")");
         }
 
         [Test]
-        [Ignore("Bug in dotless")]
         public void HttpUrlClosingBraceOnSameLine()
         {
             var input = @"
@@ -374,6 +402,63 @@ image: url(http://); }";
             var expected = @"
 .trickyurl {
   image: url(""""), url(http://);
+}";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void SupportIEFilters()
+        {
+            var input = @"
+@fat: 0;
+@cloudhead: ""#000000"";
+
+.nav {
+  filter: progid:DXImageTransform.Microsoft.Alpha(opacity = 20);
+  filter: progid:DXImageTransform.Microsoft.Alpha(opacity=@fat);
+  filter: progid:DXImageTransform.Microsoft.gradient(startColorstr=""#333333"", endColorstr=@cloudhead, GradientType=@fat);
+}";
+
+            var expected = @"
+.nav {
+  filter: progid:DXImageTransform.Microsoft.Alpha(opacity=20);
+  filter: progid:DXImageTransform.Microsoft.Alpha(opacity=0);
+  filter: progid:DXImageTransform.Microsoft.gradient(startColorstr=""#333333"", endColorstr=""#000000"", GradientType=0);
+}
+";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void DuplicatesRemoved1()
+        {
+            var input = @"
+.test {
+  background: none;
+  background: none;
+}";
+
+            var expected = @"
+.test {
+  background: none;
+}";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void DuplicatesRemoved2()
+        {
+            var input = @"
+.test {
+  background: ~""none"";
+  color: red;
+  background: none;
+}";
+
+            var expected = @"
+.test {
+  background: none;
+  color: red;
 }";
             AssertLess(input, expected);
         }

@@ -7,9 +7,15 @@ namespace dotless.Test.Specs.Compression
         [Test]
         public void Colors()
         {
-            AssertExpressionUnchanged("#ffeeaa"); // colors remain unchanged if not part of an expression
-            AssertExpression("#fea", "#ffeeaa + 0");
-            AssertExpression("blue", "#0000ff + 0");
+            AssertExpression("#fea", "#ffeeaa");
+            AssertExpression("blue", "#0000ff");
+        }
+
+        [Test]
+        public void Should_not_compress_IE_ARGB()
+        {
+            AssertExpressionUnchanged("#ffaabbcc");
+            AssertExpressionUnchanged("#aabbccdd");
         }
         
         [Test]

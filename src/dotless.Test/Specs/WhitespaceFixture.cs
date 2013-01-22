@@ -49,8 +49,7 @@ white;
         {
             var input = @"
 .white,
-.space,
-.mania
+.space, .mania
 { 
  color
       :
@@ -58,7 +57,9 @@ white;
 }";
 
             var expected = @"
-.white, .space, .mania {
+.white,
+.space,
+.mania {
   color: white;
 }";
 
@@ -132,6 +133,27 @@ white;
   border: 2px
           solid
           black;
+}";
+
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void NewLines2()
+        {
+            var input =
+                @"
+.new
+.lines {
+  background: new
+line;
+}";
+
+            var expected =
+                @"
+.new .lines {
+  background: new
+line;
 }";
 
             AssertLess(input, expected);

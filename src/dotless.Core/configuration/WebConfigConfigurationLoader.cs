@@ -1,15 +1,13 @@
 namespace dotless.Core.configuration
 {
-    using System.Configuration;
-
     public class WebConfigConfigurationLoader
     {
         public DotlessConfiguration GetConfiguration()
         {
-            var webconfig = (DotlessConfiguration)ConfigurationManager.GetSection("dotless");
+            var webconfig = DotlessConfiguration.ConfigurationManager.GetSection<DotlessConfiguration>("dotless");
             
             if (webconfig == null)
-                return DotlessConfiguration.DefaultWeb;
+                return DotlessConfiguration.GetDefaultWeb();
 
             webconfig.Web = true;
 

@@ -5,7 +5,7 @@ namespace dotless.Test.Specs
     public class MixinsArgsFixture : SpecFixtureBase
     {
         [Test]
-        public void MixinsArgsHidden()
+        public void MixinsArgsHidden1()
         {
             var input =
                 @"
@@ -15,7 +15,6 @@ namespace dotless.Test.Specs
 
 #hidden {
   .hidden();
-  .hidden;
 }
 ";
 
@@ -23,6 +22,29 @@ namespace dotless.Test.Specs
                 @"
 #hidden {
   color: transparent;
+}
+";
+
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void MixinsArgsHidden2()
+        {
+            var input =
+                @"
+.hidden() {
+  color: transparent;
+}
+
+#hidden {
+  .hidden;
+}
+";
+
+            var expected =
+                @"
+#hidden {
   color: transparent;
 }
 ";
@@ -62,6 +84,31 @@ namespace dotless.Test.Specs
 ";
 
             AssertLess(input, expected);
+        }
+
+        [Test]
+        public void MixinCallError()
+        {
+            var input =
+                @"
+.mixin (@a, @b) {
+  width: @a;
+  height: @b;
+}
+
+@c: 1px;
+
+.one-arg {
+  .mixin(@c);
+}
+";
+
+            AssertError(@"
+No matching definition was found for `.mixin(1px)` on line 9 in file 'test.less':
+  [8]: .one-arg {
+  [9]:   .mixin(@c);
+       --^
+ [10]: }", input);
         }
 
         [Test]
@@ -348,7 +395,7 @@ body {
         }
 
         [Test]
-        public void MixinArgsHashMixin()
+        public void MixinArgsHashMixin1()
         {
             var input = @"
 #id-mixin () {
@@ -356,6 +403,25 @@ body {
 }
 .id-class {
     #id-mixin();
+}
+";
+
+            var expected = @"
+.id-class {
+  color: red;
+}
+";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void MixinArgsHashMixin2()
+        {
+            var input = @"
+#id-mixin () {
+    color: red;
+}
+.id-class {
     #id-mixin;
 }
 ";
@@ -363,49 +429,254 @@ body {
             var expected = @"
 .id-class {
   color: red;
-  color: red;
 }
 ";
             AssertLess(input, expected);
         }
 
         [Test]
-        public void MixinArgsArgumentsGiven()
+        public void MixinArgsExceptCurlyBracketString()
         {
             var input =
                 @"
 .mixin-arguments (@width: 0px) {
     border: @arguments;
+}
+.arguments2 {
+    .mixin-arguments(""{"");
+}";
+
+            var expected = @"
+.arguments2 {
+  border: ""{"";
+}";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void VariadicArgs1()
+        {
+            var input = @"
+.mixin-arguments (@width: 0px, ...) {
+    border: @arguments;
+    width: @width;
 }
 
 .arguments {
     .mixin-arguments(1px, solid, black);
 }
-";
+.arguments2 {
+    .mixin-arguments();
+}
+.arguments3 {
+    .mixin-arguments;
+}";
 
             var expected = @"
 .arguments {
   border: 1px solid black;
+  width: 1px;
+}
+.arguments2 {
+  border: 0px;
+  width: 0px;
+}
+.arguments3 {
+  border: 0px;
+  width: 0px;
+}";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void VariadicArgs2()
+        {
+            var input = @"
+.mixin-arguments2 (@width, @rest...) {
+    border: @arguments;
+    rest: @rest;
+    width: @width;
+}
+.arguments4 {
+    .mixin-arguments2(0, 1, 2, 3, 4);
+}";
+
+            var expected = @"
+.arguments4 {
+  border: 0 1 2 3 4;
+  rest: 1 2 3 4;
+  width: 0;
+}";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void VariadicArgs3a()
+        {
+            var input = @"
+.mixin (...) {
+  variadic: true;
+}
+.mixin () {
+    zero: 0;
+}
+.mixin (@a: 1px) {
+    one: 1;
+}
+.mixin (@a) {
+    one-req: 1;
+}
+.mixin (@a: 1px, @b: 2px) {
+    two: 2;
+}
+
+.mixin (@a, @b, @c) {
+    three-req: 3;
+}
+
+.mixin (@a: 1px, @b: 2px, @c: 3px) {
+    three: 3;
+}
+
+.zero {
+    .mixin();
+}
+";
+
+            var expected = @"
+.zero {
+  variadic: true;
+  zero: 0;
+  one: 1;
+  two: 2;
+  three: 3;
+}";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void VariadicArgs3b()
+        {
+            var input = @"
+.mixin (...) {
+  variadic: true;
+}
+.mixin () {
+    zero: 0;
+}
+.mixin (@a: 1px) {
+    one: 1;
+}
+.mixin (@a) {
+    one-req: 1;
+}
+.mixin (@a: 1px, @b: 2px) {
+    two: 2;
+}
+
+.mixin (@a, @b, @c) {
+    three-req: 3;
+}
+
+.mixin (@a: 1px, @b: 2px, @c: 3px) {
+    three: 3;
+}
+
+.one {
+    .mixin(1);
+}
+";
+
+            var expected = @"
+.one {
+  variadic: true;
+  one: 1;
+  one-req: 1;
+  two: 2;
+  three: 3;
+}";
+            AssertLess(input, expected);
+        }
+
+        [Test]
+        public void VariadicArgs3c()
+        {
+            var input = @"
+.mixin (...) {
+  variadic: true;
+}
+.mixin () {
+    zero: 0;
+}
+.mixin (@a: 1px) {
+    one: 1;
+}
+.mixin (@a) {
+    one-req: 1;
+}
+.mixin (@a: 1px, @b: 2px) {
+    two: 2;
+}
+
+.mixin (@a, @b, @c) {
+    three-req: 3;
+}
+
+.mixin (@a: 1px, @b: 2px, @c: 3px) {
+    three: 3;
+}
+
+.two {
+    .mixin(1, 2);
+}";
+
+            var expected = @"
+.two {
+  variadic: true;
+  two: 2;
+  three: 3;
 }
 ";
             AssertLess(input, expected);
         }
 
         [Test]
-        public void MixinArgsArgumentsEmpty()
+        public void VariadicArgs3d()
         {
-            var input =
-                @"
-.mixin-arguments (@width: 0px) {
-    border: @arguments;
+            var input = @"
+.mixin (...) {
+  variadic: true;
 }
-.arguments2 {
-    .mixin-arguments();
+.mixin () {
+    zero: 0;
+}
+.mixin (@a: 1px) {
+    one: 1;
+}
+.mixin (@a) {
+    one-req: 1;
+}
+.mixin (@a: 1px, @b: 2px) {
+    two: 2;
+}
+
+.mixin (@a, @b, @c) {
+    three-req: 3;
+}
+
+.mixin (@a: 1px, @b: 2px, @c: 3px) {
+    three: 3;
+}
+
+.three {
+    .mixin(1, 2, 3);
 }";
 
             var expected = @"
-.arguments2 {
-  border: 0px;
+.three {
+  variadic: true;
+  three-req: 3;
+  three: 3;
 }";
             AssertLess(input, expected);
         }

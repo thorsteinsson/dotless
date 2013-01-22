@@ -1,11 +1,11 @@
 namespace dotless.Core.Parser.Tree
 {
     using System;
-    using System.Collections.Generic;
-    using System.Text.RegularExpressions;
+    using System.Linq;
     using Exceptions;
     using Infrastructure;
     using Infrastructure.Nodes;
+    using Plugins;
     using dotless.Core.Utils;
 
     public class Root : Ruleset
@@ -21,6 +21,7 @@ namespace dotless.Core.Parser.Tree
             : base(new NodeList<Selector>(), rules, master)
         {
             Error = error;
+            IsRoot = true;
         }
 
         public override void AppendCSS(Env env)
@@ -28,9 +29,6 @@ namespace dotless.Core.Parser.Tree
             try
             {
                 base.AppendCSS(env);
-
-                if (env.Compress)
-                    env.Output.Reset(Regex.Replace(env.Output.ToString(), @"(\s)+", " "));
             }
             catch (ParsingException e)
             {
@@ -38,16 +36,55 @@ namespace dotless.Core.Parser.Tree
             }
         }
 
+        private Root DoVisiting(Root node, Env env, VisitorPluginType pluginType)
+        {
+            return env.VisitorPlugins
+                .Where(p => p.AppliesTo == pluginType)
+                .Aggregate(node, (current, plugin) => 
+                {
+                    try
+                    {
+                        plugin.OnPreVisiting(env);
+                        Root r = plugin.Apply(current);
+                        plugin.OnPostVisiting(env);
+                        return r;
+                    }
+                    catch (Exception ex)
+                    {
+                        string message = string.Format("Plugin '{0}' failed during visiting with error '{1}'", plugin.GetName(), ex.Message);
+                        throw new ParserException(message, ex);
+                    }
+                });
+
+        }
+
         public override Node Evaluate(Env env)
         {
-            env = env ?? new Env();
+            if(Evaluated) return this;
 
-            NodeHelper.ExpandNodes<Import>(env, this.Rules);
+            try
+            {
+                env = env ?? new Env();
 
-            Root clone = new Root(new NodeList(Rules), Error, OriginalRuleset).ReducedFrom<Root>(this);
-            clone.EvaluateRules(env);
+                env.Frames.Push(this);
+                NodeHelper.ExpandNodes<Import>(env, Rules);
+                env.Frames.Pop();
 
-            return clone;
+                var clone = new Root(new NodeList(Rules), Error, OriginalRuleset);
+
+                clone = DoVisiting(clone, env, VisitorPluginType.BeforeEvaluation);
+
+                clone.ReducedFrom<Root>(this);
+                clone.EvaluateRules(env);
+                clone.Evaluated = true;
+
+                clone = DoVisiting(clone, env, VisitorPluginType.AfterEvaluation);
+                return clone;
+            }
+            catch (ParsingException e)
+            {
+                throw Error(e);
+            }
         }
     }
 }

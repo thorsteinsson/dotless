@@ -18,6 +18,16 @@ namespace dotless.Test.Specs.Functions
         }
 
         [Test]
+        public void TestEditLightnessInfo()
+        {
+            var info1 = "lightness(color, number) is not supported by less.js, so this will work but not compile with other less implementations." +
+                @" You may want to consider using lighten(color, number) or its opposite darken(color, number), which does the same thing and is supported.";
+
+            AssertExpressionLogMessage(info1, "lightness(blue, 23)");
+            AssertExpressionNoLogMessage(info1, "lightness(blue)");
+        }
+
+        [Test]
         public void TestEditLightness()
         {
             //Lighten
@@ -85,6 +95,31 @@ namespace dotless.Test.Specs.Functions
             AssertExpressionError("Expected number in function 'lighten', found \"foo\"", 14, "lighten(#fff, \"foo\")");
             AssertExpressionError("Expected color in function 'darken', found \"foo\"", 7, "darken(\"foo\", 10%)");
             AssertExpressionError("Expected number in function 'darken', found \"foo\"", 13, "darken(#fff, \"foo\")");
+        }
+
+        [Test]
+        public void TestDarknessInsideGradient()
+        {
+            AssertExpression("-webkit-linear-gradient(top, white 0%, #ededed 100%)", "-webkit-linear-gradient(top, #fff 0%, darken(#fff, 7%) 100%)");
+        }
+
+        [Test]
+        public void TestDarknessInsideGradientMixin()
+        {
+            var input = @"
+.gradientVertical(@from, @to) {
+  background: -webkit-linear-gradient(top, @from 0%,darken(@to, 7%) 100%);
+}
+.test {
+  .gradientVertical(#fff, #fff);
+}
+";
+            var expected = @"
+.test {
+  background: -webkit-linear-gradient(top, white 0%, #ededed 100%);
+}
+";
+            AssertLess(input, expected);
         }
     }
 }

@@ -14,12 +14,16 @@ namespace dotless.Core.Parser.Tree
         private int _arity;
         public string Name { get; set; }
         public NodeList<Rule> Params { get; set; }
+        public Condition Condition { get; set; }
+        public bool Variadic { get; set; }
 
-        public MixinDefinition(string name, NodeList<Rule> parameters, NodeList rules)
+        public MixinDefinition(string name, NodeList<Rule> parameters, NodeList rules, Condition condition, bool variadic)
         {
             Name = name;
             Params = parameters;
             Rules = rules;
+            Condition = condition;
+            Variadic = variadic;
             Selectors = new NodeList<Selector> {new Selector(new NodeList<Element>(new Element(null, name)))};
 
             _arity = Params.Count;
@@ -31,11 +35,8 @@ namespace dotless.Core.Parser.Tree
             return this;
         }
 
-        public Ruleset Evaluate(List<NamedArgument> args, Env env, List<Ruleset> closureContext)
+        public Ruleset EvaluateParams(Env env, List<NamedArgument> args)
         {
-//            if (args != null && args.Any())
-//                Guard.ExpectMaxArguments(Params.Count, args.Count, String.Format("'{0}'", Name), Index);
-
             var arguments = new Dictionary<string, Node>();
             args = args ?? new List<NamedArgument>();
 
@@ -46,10 +47,10 @@ namespace dotless.Core.Parser.Tree
                 {
                     hasNamedArgs = true;
 
-                    arguments[arg.Name] = new Rule(arg.Name, arg.Value.Evaluate(env)) { Index = arg.Value.Index };
+                    arguments[arg.Name] = new Rule(arg.Name, arg.Value.Evaluate(env)) { Location = arg.Value.Location };
                 }
                 else if (hasNamedArgs)
-                    throw new ParsingException("Positional arguments must appear before all named arguments.", arg.Value.Index);
+                    throw new ParsingException("Positional arguments must appear before all named arguments.", arg.Value.Location);
             }
 
             for (var i = 0; i < Params.Count; i++)
@@ -64,34 +65,61 @@ namespace dotless.Core.Parser.Tree
                 if (i < args.Count && string.IsNullOrEmpty(args[i].Name))
                     val = args[i].Value;
                 else
+                {
+                    //evaluate in scope of mixin definition?
                     val = Params[i].Value;
+                }
 
                 if (val)
-                    arguments[Params[i].Name] = new Rule(Params[i].Name, val.Evaluate(env)) {Index = val.Index};
+                {
+                    Node argRuleValue;
+                    if (Params[i].Variadic)
+                    {
+                        NodeList varArgs = new NodeList();
+                        for (int j = i; j < args.Count; j++)
+                        {
+                            varArgs.Add(args[j].Value.Evaluate(env));
+                        }
+
+                        argRuleValue = (new Expression(varArgs)).Evaluate(env);
+                    }
+                    else
+                    {
+                        argRuleValue = val.Evaluate(env);
+                    }
+                    arguments[Params[i].Name] = new Rule(Params[i].Name, argRuleValue) { Location = val.Location };
+                }
                 else
                     throw new ParsingException(
                         String.Format("wrong number of arguments for {0} ({1} for {2})", Name,
-                                      args != null ? args.Count : 0, _arity), Index);
+                                      args != null ? args.Count : 0, _arity), Location);
             }
 
-            var _arguments = new List<Node>();
+            var argumentNodes = new List<Node>();
 
             for(var i = 0; i < Math.Max(Params.Count, args.Count); i++)
             {
-              _arguments.Add(i < args.Count ? args[i].Value : Params[i].Value);
+              argumentNodes.Add(i < args.Count ? args[i].Value : Params[i].Value);
             }
 
             var frame = new Ruleset(null, new NodeList());
 
-            frame.Rules.Insert(0, new Rule("@arguments", new Expression(_arguments.Where(a => a != null)).Evaluate(env)));
+            frame.Rules.Insert(0, new Rule("@arguments", new Expression(argumentNodes.Where(a => a != null)).Evaluate(env)));
 
             foreach (var arg in arguments)
             {
                 frame.Rules.Add(arg.Value);
             }
 
+            return frame;
+        }
+
+        public Ruleset Evaluate(List<NamedArgument> args, Env env, List<Ruleset> closureContext)
+        {
+            var frame = EvaluateParams(env, args);
+
             var frames = new[] { this, frame }.Concat(env.Frames).Concat(closureContext).Reverse();
-            var context = new Env {Frames = new Stack<Ruleset>(frames)};
+            var context = env.CreateChildEnv(new Stack<Ruleset>(frames));
 
             var newRules = new NodeList();
 
@@ -101,7 +129,24 @@ namespace dotless.Core.Parser.Tree
                 {
                     var mixin = rule as MixinDefinition;
                     var parameters = Enumerable.Concat(mixin.Params, frame.Rules.Cast<Rule>());
-                    newRules.Add(new MixinDefinition(mixin.Name, new NodeList<Rule>(parameters), mixin.Rules));
+                    newRules.Add(new MixinDefinition(mixin.Name, new NodeList<Rule>(parameters), mixin.Rules, mixin.Condition, mixin.Variadic));
+                }
+                else if (rule is Import)
+                {
+                    var potentiolNodeList = rule.Evaluate(context);
+                    var nodeList = potentiolNodeList as NodeList;
+                    if (nodeList != null)
+                    {
+                        newRules.AddRange(nodeList);
+                    }
+                    else
+                    {
+                        newRules.Add(potentiolNodeList);
+                    }
+                }
+                else if (rule is Directive || rule is Media)
+                {
+                    newRules.Add(rule.Evaluate(context));
                 }
                 else if (rule is Ruleset)
                 {
@@ -109,16 +154,13 @@ namespace dotless.Core.Parser.Tree
 
                     context.Frames.Push(ruleset);
 
-                    var rules = new NodeList(NodeHelper.NonDestructiveExpandNodes<MixinCall>(context, ruleset.Rules)
-                        .Select(r => r.Evaluate(context)));
+                    newRules.Add(ruleset.Evaluate(context));
 
                     context.Frames.Pop();
-
-                    newRules.Add(new Ruleset(ruleset.Selectors, rules));
                 }
                 else if (rule is MixinCall)
                 {
-                    newRules.AddRange((NodeList) rule.Evaluate(context));
+                    newRules.AddRange((NodeList)rule.Evaluate(context));
                 }
                 else
                 {
@@ -129,32 +171,55 @@ namespace dotless.Core.Parser.Tree
             return new Ruleset(null, newRules);
         }
 
-        public override bool MatchArguments(List<NamedArgument> arguements, Env env)
+        public override MixinMatch MatchArguments(List<NamedArgument> arguments, Env env)
         {
-            var argsLength = arguements != null ? arguements.Count : 0;
+            var argsLength = arguments != null ? arguments.Count : 0;
 
-            if (argsLength < _required)
-              return false;
-            if (_required > 0 && argsLength > _arity)
-              return false;
+            if (!Variadic)
+            {
+                if (argsLength < _required)
+                    return MixinMatch.ArgumentMismatch;
+                if (argsLength > _arity)
+                    return MixinMatch.ArgumentMismatch;
+            }
+
+            if (Condition)
+            {
+                env.Frames.Push(EvaluateParams(env, arguments));
+
+                bool isPassingConditions = Condition.Passes(env);
+
+                env.Frames.Pop();
+
+                if (!isPassingConditions)
+                    return MixinMatch.GuardFail;
+            }
 
             for (var i = 0; i < Math.Min(argsLength, _arity); i++)
             {
                 if (String.IsNullOrEmpty(Params[i].Name))
                 {
-                    if (arguements[i].Value.Evaluate(env).ToCSS(env) != Params[i].Value.Evaluate(env).ToCSS(env))
+                    if (arguments[i].Value.Evaluate(env).ToCSS(env) != Params[i].Value.Evaluate(env).ToCSS(env))
                     {
-                        return false;
+                        return MixinMatch.ArgumentMismatch;
                     }
                 }
             }
 
-            return true;
+            return MixinMatch.Pass;
         }
 
-        protected override void AppendCSS(Env env, Context context)
+        public override void Accept(Plugins.IVisitor visitor)
         {
+            base.Accept(visitor);
 
+            Params = VisitAndReplace(Params, visitor);
+            Condition = VisitAndReplace(Condition, visitor, true);
+        }
+
+        public override void AppendCSS(Env env, Context context)
+        {
+            
         }
     }
 }

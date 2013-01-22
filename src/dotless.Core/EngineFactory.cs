@@ -10,13 +10,18 @@ namespace dotless.Core
         {
             Configuration = configuration;
         }
-        public EngineFactory() : this(DotlessConfiguration.Default)
+        public EngineFactory() : this(DotlessConfiguration.GetDefault())
         {
         }
 
         public ILessEngine GetEngine()
         {
-            var container = new ContainerFactory().GetContainer(Configuration);
+            return GetEngine(new ContainerFactory());
+        }
+
+        public ILessEngine GetEngine(ContainerFactory containerFactory)
+        {
+            var container = containerFactory.GetContainer(Configuration);
             return container.GetInstance<ILessEngine>();
         }
     }
